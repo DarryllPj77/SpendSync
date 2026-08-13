@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="SpendSync — personal and small business finance tracking in one simple workspace.">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="google-drive-client-id" content="YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com">
+  <meta name="google-drive-api-key" content="YOUR_GOOGLE_API_KEY">
+  <meta name="google-drive-app-id" content="YOUR_GOOGLE_CLOUD_PROJECT_NUMBER">
+  <title>Dashboard | SpendSync</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/auth.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+<div class="app-shell" id="app-view">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar__top">
+        <a class="brand brand--light" href="#dashboard" aria-label="SpendSync dashboard">
+          <span class="brand__mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M7 10.5A5.5 5.5 0 0 1 12.5 5H24v6H12.5a1.5 1.5 0 0 0 0 3H20a6.5 6.5 0 0 1 0 13H8v-6h12a.5.5 0 0 0 0-1h-7.5A5.5 5.5 0 0 1 7 14.5v-4Z"/></svg></span>
+          <span>SpendSync</span>
+        </a>
+        <button class="sidebar__close" id="sidebar-close" type="button" aria-label="Close navigation">×</button>
+      </div>
+
+      <nav class="nav-list" aria-label="Main navigation">
+        <a class="nav-link is-active" href="#dashboard" data-scroll-to="dashboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Overview
+        </a>
+        <a class="nav-link" href="#transactions" data-scroll-to="transactions">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h15M4 12h15M4 17h10"/></svg>
+          Transactions
+        </a>
+        <a class="nav-link" href="#categories" data-scroll-to="categories">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m4 7H2"/></svg>
+          Categories
+        </a>
+        <a class="nav-link" href="#monthly-summary" data-show-view="monthly-summary">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m5 10V5m5 14v-7m5 7V3"/></svg>
+          Monthly Summary
+        </a>
+        <a class="nav-link" href="#funding-sources" data-show-view="funding-sources">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v12H4zM7 7V5h10v2m-5 4v4m-2-2h4"/></svg>
+          Funding Sources
+        </a>
+        <a class="nav-link" href="#settings" data-show-settings>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 8.94 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.6 8.94a1.7 1.7 0 0 0-.34-1.88L4.2 7l2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.52V3h4v.08A1.7 1.7 0 0 0 15.06 4.6a1.7 1.7 0 0 0 1.88-.34L17 4.2 19.8 7l-.06.06A1.7 1.7 0 0 0 19.4 9 1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z"/></svg>
+          Settings
+        </a>
+      </nav>
+
+      <div class="sidebar__tip">
+        <span class="sidebar__tip-icon">✦</span>
+        <strong>Small habits add up</strong>
+        <p>Log each transaction to keep your balance accurate.</p>
+      </div>
+
+      <div class="sidebar__profile">
+        <span class="avatar" id="sidebar-avatar">S</span>
+        <span class="sidebar__profile-copy">
+          <strong id="sidebar-username">User</strong>
+          <small id="sidebar-email">user@email.com</small>
+        </span>
+        <button class="icon-button icon-button--dark" id="logout-button" type="button" aria-label="Sign out" title="Sign out">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5m4-3 4-4-4-4m4 4H9"/></svg>
+        </button>
+      </div>
+    </aside>
+    <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
+
+    <main class="dashboard" id="dashboard">
+      <header class="dashboard-header">
+        <div class="dashboard-header__intro">
+          <button class="menu-button" id="menu-button" type="button" aria-label="Open navigation">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div>
+            <p class="dashboard-header__date" id="today-label"></p>
+            <h1>Good day, <span id="welcome-name">there</span>.</h1>
+            <p>Here’s how your money is moving.</p>
+          </div>
+        </div>
+        <div class="dashboard-header__actions">
+          <button class="button button--secondary header-export-button" id="dashboard-export-button" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 19h14"/></svg>
+            Export Data
+          </button>
+          <button class="button button--primary header-add-button" id="focus-transaction-button" type="button">
+            <span aria-hidden="true">＋</span> Add transaction
+          </button>
+        </div>
+      </header>
+
+      <section class="summary-grid" aria-label="Financial summary">
+        <article class="summary-card summary-card--income">
+          <div class="summary-card__top">
+            <span class="summary-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 14 5-5 5 5M12 9v10M5 5h14"/></svg></span>
+            <span class="summary-card__trend">Money in</span>
+          </div>
+          <p>Total budget</p>
+          <strong id="total-income">₱0.00</strong>
+          <small>All recorded income</small>
+        </article>
+        <article class="summary-card summary-card--expense">
+          <div class="summary-card__top">
+            <span class="summary-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5M12 5v10M5 19h14"/></svg></span>
+            <span class="summary-card__trend">Money out</span>
+          </div>
+          <p>Total expenses</p>
+          <strong id="total-expenses">₱0.00</strong>
+          <small>All recorded spending</small>
+        </article>
+        <article class="summary-card summary-card--balance">
+          <div class="summary-card__top">
+            <span class="summary-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M16 12h2"/></svg></span>
+            <span class="summary-card__trend">Available</span>
+          </div>
+          <p>Remaining balance</p>
+          <strong id="remaining-balance">₱0.00</strong>
+          <small id="balance-status">Add income to get started</small>
+        </article>
+      </section>
+
+      <div class="entry-tabs" role="tablist" aria-label="Choose data entry form">
+        <button class="entry-tab is-active" type="button" role="tab" aria-selected="true" data-entry-tab="expense">Expense</button>
+        <button class="entry-tab" type="button" role="tab" aria-selected="false" data-entry-tab="deposit">Deposit</button>
+      </div>
+
+      <div class="dashboard-grid">
+        <aside class="panel entry-panel expense-entry-panel" id="new-transaction" data-entry-panel="expense">
+          <div class="panel__header">
+            <div>
+              <p class="section-kicker">Money out</p>
+              <h2>Log an expense</h2>
+            </div>
+          </div>
+          <form class="transaction-form" id="transaction-form" novalidate>
+            <input type="hidden" name="type" value="expense">
+            <div class="field-row">
+              <div class="field">
+                <label for="transaction-date">Date</label>
+                <input id="transaction-date" name="date" type="date" required>
+              </div>
+              <div class="field">
+                <label for="transaction-amount">Amount spent (&#8369;)</label>
+                <input id="transaction-amount" name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" required>
+              </div>
+            </div>
+            <div class="field">
+              <label for="transaction-item">Item or description</label>
+              <input id="transaction-item" name="item" type="text" maxlength="80" placeholder="e.g. Office supplies" required>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="transaction-category">Category</label>
+                <select id="transaction-category" name="category" required></select>
+              </div>
+              <div class="field">
+                <label for="transaction-method">Payment method</label>
+                <select id="transaction-method" name="method" required>
+                  <option value="">Select method</option>
+                  <option>Cash</option>
+                  <option>GCash</option>
+                  <option>Maya</option>
+                  <option>Bank Transfer</option>
+                  <option>Debit Card</option>
+                  <option>Credit Card</option>
+                  <option>Cheque</option>
+                  <option>Other</option>
+                </select>
+              </div>
+            </div>
+            <div class="field funding-source-field" id="funding-source-field">
+              <label for="transaction-funding-source">Funding source <span class="optional-label">Optional</span></label>
+              <select id="transaction-funding-source" name="fundingSourceId">
+                <option value="">Not linked to a specific deposit</option>
+              </select>
+              <small class="field__hint">Choose the deposit that paid for this expense.</small>
+            </div>
+            <div class="form-alert" id="transaction-alert" role="alert" hidden></div>
+            <button class="button button--primary button--full" type="submit">Save expense <span aria-hidden="true">&rarr;</span></button>
+          </form>
+        </aside>
+
+        <aside class="panel entry-panel deposit-entry-panel" id="new-deposit" data-entry-panel="deposit">
+          <div class="panel__header">
+            <div>
+              <p class="section-kicker">Money in</p>
+              <h2>Log a deposit</h2>
+            </div>
+          </div>
+          <form class="transaction-form" id="deposit-form" novalidate>
+            <div class="field-row">
+              <div class="field">
+                <label for="deposit-date">Date added</label>
+                <input id="deposit-date" name="date" type="date" required>
+              </div>
+              <div class="field">
+                <label for="deposit-amount">Amount added (&#8369;)</label>
+                <input id="deposit-amount" name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" required>
+              </div>
+            </div>
+            <div class="field">
+              <label for="deposit-source">Source or description</label>
+              <input id="deposit-source" name="source" type="text" maxlength="80" placeholder="e.g. Parents" required>
+            </div>
+            <div class="field">
+              <label for="deposit-method">Deposit method</label>
+              <select id="deposit-method" name="method" required>
+                <option value="">Select method</option>
+                <option>Cash</option>
+                <option>GCash</option>
+                <option>Maya</option>
+                <option>Bank Transfer</option>
+                <option>Cheque</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div class="form-alert" id="deposit-alert" role="alert" hidden></div>
+            <button class="button button--primary button--full" type="submit">Save deposit <span aria-hidden="true">&rarr;</span></button>
+          </form>
+        </aside>
+
+        <section class="panel ledger-panel" id="transactions">
+          <div class="panel__header panel__header--wrap">
+            <div>
+              <p class="section-kicker">Cash flow</p>
+              <h2>Transaction ledger</h2>
+            </div>
+            <div class="ledger-tools">
+              <label class="search-box">
+                <span class="visually-hidden">Search transactions</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+                <input id="transaction-search" type="search" placeholder="Search ledger">
+              </label>
+              <label class="ledger-filter-field">
+                <span>Type</span>
+                <select class="compact-select" id="transaction-filter">
+                  <option value="all">All types</option>
+                  <option value="income">Deposits</option>
+                  <option value="expense">Expense</option>
+                </select>
+              </label>
+              <label class="ledger-filter-field">
+                <span>Category</span>
+                <select class="compact-select" id="transaction-category-filter">
+                  <option value="all">All categories</option>
+                </select>
+              </label>
+              <label class="ledger-filter-field ledger-date-filter">
+                <span>Start date</span>
+                <input class="compact-date" id="transaction-start-date" type="date">
+              </label>
+              <label class="ledger-filter-field ledger-date-filter">
+                <span>End date</span>
+                <input class="compact-date" id="transaction-end-date" type="date">
+              </label>
+            </div>
+          </div>
+          <div class="table-wrap ledger-table-wrap">
+            <table class="ledger-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th class="number-cell">In (+)</th>
+                  <th class="number-cell">Out (−)</th>
+                  <th class="number-cell">Balance</th>
+                  <th><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody id="transaction-rows"></tbody>
+            </table>
+            <div class="empty-state" id="empty-transactions" hidden>
+              <span class="empty-state__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h10l3 3v15H4V3h3Zm1 7h8M8 14h8M8 18h5"/></svg></span>
+              <h3>Your ledger is ready</h3>
+              <p>Add your first deposit or expense to start tracking your running balance.</p>
+              <button class="text-button" type="button" data-focus-form>Add an expense &rarr;</button>
+            </div>
+          </div>
+          <div class="panel__footer" id="ledger-footer"></div>
+        </section>
+      </div>
+
+      <section class="panel categories-panel" id="categories">
+        <div class="panel__header">
+          <div>
+            <p class="section-kicker">Spending breakdown</p>
+            <h2>Category summaries</h2>
+          </div>
+          <p class="panel__hint">Based on expenses only</p>
+        </div>
+        <div class="category-grid" id="category-summaries"></div>
+        <div class="empty-state empty-state--small" id="empty-categories" hidden>
+          <p>Your spending categories will appear after you record an expense.</p>
+        </div>
+      </section>
+
+      <footer class="dashboard-footer">
+        <span>SpendSync stores your data locally in this browser.</span>
+        <button type="button" id="clear-transactions-button">Clear all transactions</button>
+      </footer>
+    </main>
+
+    <main class="dashboard report-view" id="monthly-summary-view" hidden>
+      <header class="dashboard-header">
+        <div class="dashboard-header__intro">
+          <button class="menu-button view-menu-button" type="button" aria-label="Open navigation">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div>
+            <p class="dashboard-header__date">Reports</p>
+            <h1>Monthly Summary</h1>
+            <p>Compare income and spending trends across every recorded month.</p>
+          </div>
+        </div>
+        <button class="button button--secondary view-back-button" type="button"><span aria-hidden="true">←</span> Back to overview</button>
+      </header>
+
+      <section class="report-stat-grid" aria-label="Monthly report totals">
+        <article class="report-stat">
+          <span>Total income</span>
+          <strong id="report-total-income">₱0.00</strong>
+          <small>Across all recorded months</small>
+        </article>
+        <article class="report-stat report-stat--expense">
+          <span>Total expenses</span>
+          <strong id="report-total-expenses">₱0.00</strong>
+          <small>Across all recorded months</small>
+        </article>
+        <article class="report-stat report-stat--net">
+          <span>All-time net</span>
+          <strong id="report-total-net">₱0.00</strong>
+          <small id="report-month-count">0 months recorded</small>
+        </article>
+      </section>
+
+      <section class="panel report-chart-panel">
+        <div class="panel__header">
+          <div>
+            <p class="section-kicker">Month-over-month</p>
+            <h2>Income vs. expenses</h2>
+          </div>
+          <span class="chart-legend-note">Last 12 recorded months</span>
+        </div>
+        <div class="report-chart-wrap" id="monthly-chart-wrap">
+          <canvas id="monthly-summary-chart" aria-label="Monthly income and expenses bar chart" role="img"></canvas>
+          <div class="empty-state empty-state--chart" id="monthly-chart-empty" hidden>
+            <p>Add transactions to see your monthly cash-flow chart.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel monthly-table-panel">
+        <div class="panel__header">
+          <div>
+            <p class="section-kicker">Complete history</p>
+            <h2>Monthly totals</h2>
+          </div>
+          <p class="panel__hint">Newest month first</p>
+        </div>
+        <div class="table-wrap report-table-wrap">
+          <table class="monthly-table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th class="number-cell">Total Income</th>
+                <th class="number-cell">Total Expenses</th>
+                <th class="number-cell">Net Balance</th>
+              </tr>
+            </thead>
+            <tbody id="monthly-summary-rows"></tbody>
+            <tfoot id="monthly-summary-footer"></tfoot>
+          </table>
+          <div class="empty-state" id="monthly-summary-empty" hidden>
+            <h3>No monthly data yet</h3>
+            <p>Your month-by-month summary will appear after you log a transaction.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <main class="dashboard funding-view" id="funding-sources-view" hidden>
+      <header class="dashboard-header">
+        <div class="dashboard-header__intro">
+          <button class="menu-button view-menu-button" type="button" aria-label="Open navigation">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div>
+            <p class="dashboard-header__date">Source tracking</p>
+            <h1>Funding Sources</h1>
+            <p>See which expenses were paid from each recorded income deposit.</p>
+          </div>
+        </div>
+        <button class="button button--secondary view-back-button" type="button"><span aria-hidden="true">←</span> Back to overview</button>
+      </header>
+
+      <section class="funding-stat-grid" aria-label="Funding source totals">
+        <article><span>Total deposits</span><strong id="funding-total-deposits">₱0.00</strong></article>
+        <article><span>Linked expenses</span><strong id="funding-total-allocated">₱0.00</strong></article>
+        <article><span>Unallocated funds</span><strong id="funding-total-remaining">₱0.00</strong></article>
+      </section>
+
+      <section class="panel funding-ledger-panel">
+        <div class="panel__header">
+          <div>
+            <p class="section-kicker">Deposit breakdown</p>
+            <h2>Income and linked expenses</h2>
+          </div>
+          <p class="panel__hint">Most recent deposits first</p>
+        </div>
+        <div class="funding-source-list" id="funding-source-list"></div>
+        <div class="empty-state" id="funding-sources-empty" hidden>
+          <h3>No income deposits yet</h3>
+          <p>Add a deposit from the Overview. It will then become available as an expense funding source.</p>
+          <button class="text-button" type="button" data-focus-form>Add income →</button>
+        </div>
+      </section>
+    </main>
+
+    <main class="dashboard settings-view" id="settings-view" hidden>
+      <header class="dashboard-header settings-header">
+        <div class="dashboard-header__intro">
+          <button class="menu-button" id="settings-menu-button" type="button" aria-label="Open navigation">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div>
+            <p class="dashboard-header__date">Account preferences</p>
+            <h1>Settings</h1>
+            <p>Manage your profile, password, and locally stored data.</p>
+          </div>
+        </div>
+        <button class="button button--secondary" id="settings-back-button" type="button">
+          <span aria-hidden="true">←</span> Back to overview
+        </button>
+      </header>
+
+      <section class="settings-hero" aria-label="Account summary">
+        <span class="settings-hero__avatar" id="settings-avatar">S</span>
+        <div class="settings-hero__identity">
+          <p>Your SpendSync account</p>
+          <h2 id="settings-display-name">User</h2>
+          <span id="settings-display-email">user@email.com</span>
+        </div>
+        <div class="settings-hero__facts">
+          <span><small>Transactions</small><strong id="settings-transaction-count">0</strong></span>
+          <span><small>Member since</small><strong id="settings-member-since">—</strong></span>
+        </div>
+      </section>
+
+      <div class="settings-grid">
+        <section class="panel settings-panel">
+          <div class="panel__header settings-panel__header">
+            <span class="settings-section-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+            </span>
+            <div>
+              <p class="section-kicker">Personal details</p>
+              <h2>Profile information</h2>
+              <p>Update the name and email you use to sign in.</p>
+            </div>
+          </div>
+          <form class="settings-form" id="profile-form" novalidate>
+            <div class="field">
+              <label for="profile-username">Username</label>
+              <input id="profile-username" name="username" type="text" autocomplete="username" minlength="3" required>
+              <span class="field__error" id="profile-username-error"></span>
+            </div>
+            <div class="field">
+              <label for="profile-email">Email address</label>
+              <input id="profile-email" name="email" type="email" autocomplete="email" required>
+              <span class="field__error" id="profile-email-error"></span>
+            </div>
+            <div class="form-alert" id="profile-alert" role="alert" hidden></div>
+            <div class="settings-form__actions">
+              <span>Changes apply to this browser account.</span>
+              <button class="button button--primary" type="submit">Save profile</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel settings-panel">
+          <div class="panel__header settings-panel__header">
+            <span class="settings-section-icon settings-section-icon--password" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/></svg>
+            </span>
+            <div>
+              <p class="section-kicker">Account security</p>
+              <h2>Change password</h2>
+              <p>You’ll be signed out after your password changes.</p>
+            </div>
+          </div>
+          <form class="settings-form" id="password-change-form" novalidate>
+            <div class="field">
+              <label for="current-password">Current password</label>
+              <div class="password-input">
+                <input id="current-password" name="currentPassword" type="password" autocomplete="current-password" placeholder="Enter current password" required>
+                <button class="password-toggle" type="button" data-password-target="current-password" aria-label="Show password" aria-pressed="false">
+                  <svg class="icon-eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                </button>
+              </div>
+              <span class="field__error" id="current-password-error"></span>
+            </div>
+            <div class="settings-password-row">
+              <div class="field">
+                <label for="new-password">New password</label>
+                <div class="password-input">
+                  <input id="new-password" name="newPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters" required>
+                  <button class="password-toggle" type="button" data-password-target="new-password" aria-label="Show password" aria-pressed="false">
+                    <svg class="icon-eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                  </button>
+                </div>
+                <span class="field__error" id="new-password-error"></span>
+              </div>
+              <div class="field">
+                <label for="confirm-new-password">Confirm new password</label>
+                <div class="password-input">
+                  <input id="confirm-new-password" name="confirmNewPassword" type="password" autocomplete="new-password" placeholder="Repeat new password" required>
+                  <button class="password-toggle" type="button" data-password-target="confirm-new-password" aria-label="Show password" aria-pressed="false">
+                    <svg class="icon-eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                  </button>
+                </div>
+                <span class="field__error" id="confirm-new-password-error"></span>
+              </div>
+            </div>
+            <div class="form-alert" id="password-change-alert" role="alert" hidden></div>
+            <div class="settings-form__actions">
+              <span>Use 8 or more characters.</span>
+              <button class="button button--primary" type="submit">Update password</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel settings-panel transfer-panel" id="data-transfer">
+          <div class="panel__header settings-panel__header">
+            <span class="settings-section-icon settings-section-icon--transfer" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3m3 3-3 3M17 17H6l3 3m-3-3 3-3"/></svg>
+            </span>
+            <div>
+              <p class="section-kicker">Import and export</p>
+              <h2>Move your transaction data</h2>
+              <p>Download your chronological ledger or append rows from an Excel or CSV file.</p>
+            </div>
+          </div>
+          <div class="transfer-grid">
+            <article class="transfer-card">
+              <div class="transfer-card__heading">
+                <span class="transfer-card__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M5 19h14"/></svg>
+                </span>
+                <div>
+                  <h3>Export your ledger</h3>
+                  <p>Creates an oldest-to-newest file with a calculated running balance.</p>
+                </div>
+              </div>
+              <label class="transfer-format" for="export-format">
+                <span>File format</span>
+                <select id="export-format">
+                  <option value="xlsx">Excel workbook (.xlsx)</option>
+                  <option value="csv">Comma-separated values (.csv)</option>
+                </select>
+              </label>
+              <button class="button button--primary button--full" id="export-data-button" type="button">Export Data</button>
+            </article>
+
+            <article class="transfer-card">
+              <div class="transfer-card__heading">
+                <span class="transfer-card__icon transfer-card__icon--import" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M12 16V4m-4 4 4-4 4 4M5 20h14"/></svg>
+                </span>
+                <div>
+                  <h3>Import transactions</h3>
+                  <p>Imports a standard ledger or your split History Payments sheet without replacing existing data.</p>
+                </div>
+              </div>
+              <div class="import-dropzone" id="import-dropzone" role="button" tabindex="0" aria-label="Choose a CSV or Excel file to import">
+                <input class="visually-hidden" id="import-data-input" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
+                <span id="import-file-name">Choose a .csv, .xlsx, or .xls file</span>
+                <small>Supports standard columns and Budget Pajaganas.xlsx</small>
+              </div>
+              <div class="transfer-import-actions">
+                <button class="button button--secondary button--full" id="import-data-button" type="button">Import Local File</button>
+                <button class="button button--google-drive button--full" id="google-drive-import-button" type="button">
+                  <svg class="google-drive-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#0F9D58" d="M8.1 3h5.15l3.1 5.35-2.58 4.47L8.1 3Z"/>
+                    <path fill="#F4B400" d="m8.1 3 2.58 4.47-5.15 8.92L3 12.02 8.1 3Z"/>
+                    <path fill="#4285F4" d="M5.53 16.39h10.3l2.58-4.47h-5.16l-2.57 4.47H5.53Z"/>
+                  </svg>
+                  Import from Google Drive
+                </button>
+              </div>
+              <div class="transfer-status" id="import-status" role="status" aria-live="polite" hidden></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel settings-panel danger-panel">
+          <div class="panel__header settings-panel__header">
+            <span class="settings-section-icon settings-section-icon--danger" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Zm0 6v5m0 3v.1"/></svg>
+            </span>
+            <div>
+              <p class="section-kicker section-kicker--danger">Data management</p>
+              <h2>Account actions</h2>
+              <p>Control the records stored for this account.</p>
+            </div>
+          </div>
+          <div class="account-actions">
+            <div class="account-action-row">
+              <div>
+                <strong>Reset account data</strong>
+                <p>Permanently remove every transaction for this account. Your login details remain unchanged.</p>
+              </div>
+              <button class="button button--danger-outline" id="reset-account-data-button" type="button">Reset data</button>
+            </div>
+            <div class="account-action-row">
+              <div>
+                <strong>Log out of SpendSync</strong>
+                <p>End the active session on this device. Your saved account data will remain.</p>
+              </div>
+              <button class="button button--secondary" id="settings-logout-button" type="button">Log out</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  </div>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
+  <script id="google-identity-script" src="https://accounts.google.com/gsi/client" async defer></script>
+  <script id="google-api-script" src="https://apis.google.com/js/api.js" async defer></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

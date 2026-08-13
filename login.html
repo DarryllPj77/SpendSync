@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Sign in to SpendSync to manage your personal and small-business finances.">
+  <meta name="theme-color" content="#0f766e">
+  <title>Sign In | SpendSync</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/auth.css">
+</head>
+<body>
+  <div class="auth-shell" id="auth-view">
+    <section class="brand-panel" aria-label="SpendSync introduction">
+      <a class="brand brand--light" href="login.html" aria-label="SpendSync home">
+        <span class="brand__mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" role="img"><path d="M7 10.5A5.5 5.5 0 0 1 12.5 5H24v6H12.5a1.5 1.5 0 0 0 0 3H20a6.5 6.5 0 0 1 0 13H8v-6h12a.5.5 0 0 0 0-1h-7.5A5.5 5.5 0 0 1 7 14.5v-4Z"/></svg>
+        </span>
+        <span>SpendSync</span>
+      </a>
+
+      <div class="brand-panel__content">
+        <p class="eyebrow">Your money, in sync</p>
+        <h1>Make every peso<br>feel intentional.</h1>
+        <p>Track personal spending and business cash flow together—with a clear view of where your money goes.</p>
+      </div>
+
+      <div class="brand-panel__preview" aria-hidden="true">
+        <div class="mini-card mini-card--main">
+          <span>Available balance</span>
+          <strong>₱42,680.00</strong>
+          <small><i></i> 12.8% this month</small>
+        </div>
+        <div class="mini-card mini-card--float">
+          <span>Saved this week</span>
+          <strong>₱3,250</strong>
+        </div>
+      </div>
+      <p class="brand-panel__note">Private by design. Your financial data stays on this device.</p>
+    </section>
+
+    <main class="auth-main">
+      <div class="auth-card">
+        <div class="auth-card__mobile-brand">
+          <a class="brand" href="login.html" aria-label="SpendSync home">
+            <span class="brand__mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M7 10.5A5.5 5.5 0 0 1 12.5 5H24v6H12.5a1.5 1.5 0 0 0 0 3H20a6.5 6.5 0 0 1 0 13H8v-6h12a.5.5 0 0 0 0-1h-7.5A5.5 5.5 0 0 1 7 14.5v-4Z"/></svg></span>
+            <span>SpendSync</span>
+          </a>
+        </div>
+
+        <div id="login-panel">
+          <div class="auth-heading">
+            <p class="eyebrow">Welcome back</p>
+            <h2>Sign in to your account</h2>
+            <p>Enter your details to continue tracking your finances.</p>
+          </div>
+          <form class="auth-form" id="login-form" novalidate>
+            <div class="field">
+              <label for="login-identifier">Email or username</label>
+              <input id="login-identifier" name="identifier" type="text" autocomplete="username" placeholder="you@example.com" required>
+              <span class="field__error" id="login-identifier-error"></span>
+            </div>
+            <div class="field">
+              <div class="field__label-row"><label for="login-password">Password</label></div>
+              <div class="password-input">
+                <input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required>
+                <button class="password-toggle" type="button" data-password-target="login-password" aria-label="Show password" aria-pressed="false">
+                  <svg class="icon-eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                </button>
+              </div>
+              <span class="field__error" id="login-password-error"></span>
+            </div>
+            <div class="form-alert" id="login-alert" role="alert" hidden></div>
+            <button class="button button--primary button--full" type="submit">Sign in <span aria-hidden="true">→</span></button>
+          </form>
+          <p class="auth-switch">New to SpendSync? <button type="button" data-show-auth="signup">Create an account</button></p>
+        </div>
+
+        <div id="signup-panel" hidden>
+          <div class="auth-heading">
+            <p class="eyebrow">Get started</p>
+            <h2>Create your account</h2>
+            <p>Build a clearer picture of your money in minutes.</p>
+          </div>
+          <form class="auth-form auth-form--compact" id="signup-form" novalidate>
+            <div class="field">
+              <label for="signup-username">Username</label>
+              <input id="signup-username" name="username" type="text" autocomplete="username" placeholder="Choose a username" required>
+              <span class="field__error" id="signup-username-error"></span>
+            </div>
+            <div class="field">
+              <label for="signup-email">Email</label>
+              <input id="signup-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+              <span class="field__error" id="signup-email-error"></span>
+            </div>
+            <div class="field">
+              <label for="signup-password">Password</label>
+              <div class="password-input">
+                <input id="signup-password" name="password" type="password" autocomplete="new-password" placeholder="At least 8 characters" required>
+                <button class="password-toggle" type="button" data-password-target="signup-password" aria-label="Show password" aria-pressed="false">
+                  <svg class="icon-eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                </button>
+              </div>
+              <span class="field__error" id="signup-password-error"></span>
+            </div>
+            <div class="field">
+              <label for="signup-confirm-password">Rewrite password</label>
+              <div class="password-input">
+                <input id="signup-confirm-password" name="confirmPassword" type="password" autocomplete="new-password" placeholder="Type your password again" required>
+                <button class="password-toggle" type="button" data-password-target="signup-confirm-password" aria-label="Show password" aria-pressed="false">
+                  <svg class="icon-eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                </button>
+              </div>
+              <span class="field__error" id="signup-confirm-password-error"></span>
+            </div>
+            <div class="form-alert" id="signup-alert" role="alert" hidden></div>
+            <button class="button button--primary button--full" type="submit">Create account <span aria-hidden="true">→</span></button>
+          </form>
+          <p class="auth-switch">Already have an account? <button type="button" data-show-auth="login">Sign in</button></p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="js/components/auth.js"></script>
+</body>
+</html>
