@@ -1,8 +1,11 @@
 "use strict";
 
 const DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const GOOGLE_SHEET_MIME_TYPE = "application/vnd.google-apps.spreadsheet";
+const XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const PICKER_MIME_TYPES = Object.freeze([
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  GOOGLE_SHEET_MIME_TYPE,
+  XLSX_MIME_TYPE,
   "text/csv",
 ]);
 const ALLOWED_FILE_NAME = /\.(xlsx|csv)$/i;
@@ -132,7 +135,7 @@ function pickSpreadsheet({ apiKey, appId }, oauthToken) {
       .setAppId(appId)
       .setOAuthToken(oauthToken)
       .setOrigin(window.location.origin)
-      .setTitle("Select an XLSX or CSV spreadsheet")
+      .setTitle("Select a Google Sheet, XLSX, or CSV file")
       .addView(view)
       .setCallback((data) => {
         const action = data[picker.Response.ACTION];
@@ -153,8 +156,9 @@ function pickSpreadsheet({ apiKey, appId }, oauthToken) {
           reject(new Error("Google Picker did not return a valid file."));
           return;
         }
-        if (!ALLOWED_FILE_NAME.test(selectedFile.name)) {
-          reject(new Error("Choose an .xlsx or .csv file from Google Drive."));
+        const isNativeGoogleSheet = selectedFile.mimeType === GOOGLE_SHEET_MIME_TYPE;
+        if (!isNativeGoogleSheet && !ALLOWED_FILE_NAME.test(selectedFile.name)) {
+          reject(new Error("Choose a Google Sheet, .xlsx, or .csv file from Google Drive."));
           return;
         }
         resolve(selectedFile);
@@ -165,14 +169,25 @@ function pickSpreadsheet({ apiKey, appId }, oauthToken) {
   });
 }
 
-async function downloadDriveFile(fileId, oauthToken) {
-  const response = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
-    {
-      method: "GET",
-      headers: { Authorization: `Bearer ${oauthToken}` },
-    },
-  );
+export function getDriveDownloadUrl(selectedFile) {
+  const fileUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(selectedFile.id)}`;
+  if (selectedFile.mimeType === GOOGLE_SHEET_MIME_TYPE) {
+    return `${fileUrl}/export?mimeType=${encodeURIComponent(XLSX_MIME_TYPE)}`;
+  }
+  return `${fileUrl}?alt=media`;
+}
+
+export function getParserFileName(selectedFile) {
+  if (selectedFile.mimeType !== GOOGLE_SHEET_MIME_TYPE) return selectedFile.name;
+  const baseName = selectedFile.name.trim().replace(/\.(xlsx|csv)$/i, "") || "Google Sheet";
+  return `${baseName}.xlsx`;
+}
+
+export async function downloadDriveFile(selectedFile, oauthToken) {
+  const response = await fetch(getDriveDownloadUrl(selectedFile), {
+    method: "GET",
+    headers: { Authorization: `Bearer ${oauthToken}` },
+  });
 
   if (!response.ok) {
     let detail = "";
@@ -186,7 +201,8 @@ async function downloadDriveFile(fileId, oauthToken) {
       accessToken = "";
       accessTokenExpiresAt = 0;
     }
-    throw new Error(detail || `Google Drive download failed (HTTP ${response.status}).`);
+    const operation = selectedFile.mimeType === GOOGLE_SHEET_MIME_TYPE ? "export" : "download";
+    throw new Error(detail || `Google Drive ${operation} failed (HTTP ${response.status}).`);
   }
 
   return response.arrayBuffer();
@@ -234,9 +250,11 @@ export function initializeGoogleDriveImport({
         return;
       }
 
-      setStatus(`Downloading ${selectedFile.name} from Google Drive...`);
-      const arrayBuffer = await downloadDriveFile(selectedFile.id, oauthToken);
-      await importBuffer(arrayBuffer, selectedFile.name);
+      const isNativeGoogleSheet = selectedFile.mimeType === GOOGLE_SHEET_MIME_TYPE;
+      const parserFileName = getParserFileName(selectedFile);
+      setStatus(`${isNativeGoogleSheet ? "Exporting" : "Downloading"} ${selectedFile.name} from Google Drive...`);
+      const arrayBuffer = await downloadDriveFile(selectedFile, oauthToken);
+      await importBuffer(arrayBuffer, parserFileName);
     } catch (error) {
       console.error("SpendSync Google Drive import failed:", error);
       setStatus(error.message || "Google Drive import could not be completed.", true);

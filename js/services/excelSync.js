@@ -9,7 +9,14 @@ import {
   getTransactions,
 } from "../utils/storage.js";
 import { toDateInputValue } from "../utils/formatters.js";
+import {
+  createCombinedFundingSourceId,
+  formatCombinedFundingSourceLabel,
+  getFundingMonthKey,
+  normalizeFundingSourceKey,
+} from "../utils/funding.js";
 import { calculateLedger } from "../components/ledger.js";
+import { recordState } from "../utils/history.js";
 
 const IMPORT_COLUMN_ALIASES = Object.freeze({
   date: ["date", "transactiondate"],
@@ -21,9 +28,31 @@ const IMPORT_COLUMN_ALIASES = Object.freeze({
 });
 export const DEFAULT_IMPORT_LABEL = "Choose a .csv, .xlsx, or .xls file";
 const LEGACY_HISTORY_SHEET = "History Payments";
-const LEGACY_HISTORY_HEADER_INDEX = 2;
-const LEGACY_EXPENSE_HEADERS = Object.freeze(["date", "itemdescription", "category", "amountspent", "paymentmethod"]);
-const LEGACY_DEPOSIT_HEADERS = Object.freeze(["dateadded", "sourcedescription", "amountadded", "depositmethod"]);
+const CATEGORY_TRACKER_SHEETS = Object.freeze([
+  "Category Expense Tracker",
+  "Category Tracking",
+]);
+const LEGACY_HISTORY_HEADER_INDEX = 3;
+const LEGACY_EXPENSE_HEADERS = Object.freeze({
+  date: "date",
+  description: "itemdescription",
+  category: "category",
+  amount: "amountspent",
+  method: "paymentmethod",
+});
+const LEGACY_DEPOSIT_HEADERS = Object.freeze({
+  date: "dateadded",
+  description: "sourcedescription",
+  amount: "amountadded",
+  method: "depositmethod",
+});
+const CATEGORY_TRACKER_HEADERS = Object.freeze({
+  category: "category",
+  date: "date",
+  description: "itemdescription",
+  amount: "amountspent",
+  fundingSource: "fundingsourcerecentdeposit",
+});
 
 const exportFormatSelect = document.querySelector("#export-format");
 const importDataInput = document.querySelector("#import-data-input");
@@ -186,8 +215,8 @@ function findImportHeaderRow(rows) {
 function mapLegacyHistoryColumns(headerRow) {
   const normalizedHeaders = headerRow.map(normalizeImportHeader);
   return {
-    expense: LEGACY_EXPENSE_HEADERS.map((header) => normalizedHeaders.indexOf(header)),
-    deposit: LEGACY_DEPOSIT_HEADERS.map((header) => normalizedHeaders.indexOf(header)),
+    expense: Object.values(LEGACY_EXPENSE_HEADERS).map((header) => normalizedHeaders.indexOf(header)),
+    deposit: Object.values(LEGACY_DEPOSIT_HEADERS).map((header) => normalizedHeaders.indexOf(header)),
   };
 }
 
@@ -252,10 +281,37 @@ function normalizeImportedAmount(value) {
   text = text
     .replace(/^\((.*)\)$/, "$1")
     .replace(/php/gi, "")
-    .replace(/[₱$€£,\s]/g, "");
-  const amount = Number(text);
+    .replace(/₱/g, "")
+    .replace(/,/g, "")
+    .replace(/[$€£\s]/g, "");
+  const amount = Number.parseFloat(text);
   if (!Number.isFinite(amount)) return NaN;
   return Math.abs(isParenthesized ? -amount : amount);
+}
+
+function normalizeMatchText(value) {
+  return String(value ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-PH");
+}
+
+function amountToCents(value) {
+  return Math.round(Number(value) * 100);
+}
+
+export function parseFundingSourceReference(value) {
+  const text = String(value ?? "").trim();
+  const match = text.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
+  if (!match) return null;
+
+  const source = match[1].trim();
+  const amount = normalizeImportedAmount(match[2]);
+  if (!source || !Number.isFinite(amount) || amount <= 0) return null;
+
+  return {
+    source,
+    amount,
+    sourceKey: normalizeMatchText(source),
+    amountCents: amountToCents(amount),
+  };
 }
 
 function normalizeImportedType(value) {
@@ -382,6 +438,139 @@ export function parseLegacyHistoryPayments(rows, fileName, XLSX) {
   };
 }
 
+function mapCategoryTrackerColumns(headerRow) {
+  const normalizedHeaders = headerRow.map(normalizeImportHeader);
+  return Object.fromEntries(
+    Object.entries(CATEGORY_TRACKER_HEADERS)
+      .map(([field, header]) => [field, normalizedHeaders.indexOf(header)]),
+  );
+}
+
+function findCategoryTrackerHeaderRow(rows) {
+  const hasRequiredHeaders = (row) => (
+    Object.values(mapCategoryTrackerColumns(row)).every((columnIndex) => columnIndex >= 0)
+  );
+  if (hasRequiredHeaders(rows[LEGACY_HISTORY_HEADER_INDEX] ?? [])) return LEGACY_HISTORY_HEADER_INDEX;
+  return rows.slice(0, 15).findIndex(hasRequiredHeaders);
+}
+
+function expenseMatchKey({ date, item, category, amount }) {
+  return [
+    date,
+    normalizeMatchText(item),
+    normalizeMatchText(category),
+    amountToCents(amount),
+  ].join("\u001f");
+}
+
+export function parseCategoryExpenseTracker(rows, XLSX) {
+  const headerRowIndex = findCategoryTrackerHeaderRow(rows);
+  if (headerRowIndex < 0) {
+    return {
+      references: [],
+      warnings: ['The category tracker does not contain the expected "Funding Source (Recent Deposit)" column.'],
+    };
+  }
+
+  const columns = mapCategoryTrackerColumns(rows[headerRowIndex]);
+  const references = [];
+  const warnings = [];
+
+  rows.slice(headerRowIndex + 1).forEach((row, index) => {
+    const rowNumber = headerRowIndex + index + 2;
+    const category = String(row[columns.category] ?? "").trim();
+    const date = normalizeImportedDate(row[columns.date], XLSX);
+    const item = String(row[columns.description] ?? "").trim();
+    const amount = normalizeImportedAmount(row[columns.amount]);
+    const fundingLabel = String(row[columns.fundingSource] ?? "").trim();
+
+    if (![category, date, item, fundingLabel].some(Boolean) && !Number.isFinite(amount)) return;
+    if (!fundingLabel) return;
+
+    const fundingReference = parseFundingSourceReference(fundingLabel);
+    if (!category || !date || !item || !Number.isFinite(amount) || amount <= 0) {
+      warnings.push(`Tracker row ${rowNumber} could not be matched to an expense.`);
+      return;
+    }
+    if (!fundingReference) {
+      warnings.push(`Tracker row ${rowNumber} has an invalid funding source reference.`);
+      return;
+    }
+
+    references.push({
+      rowNumber,
+      expenseKey: expenseMatchKey({ date, item, category, amount }),
+      fundingLabel,
+      fundingReference,
+    });
+  });
+
+  return { references, warnings };
+}
+
+export function attachCategoryFundingLinks(
+  importedTransactions,
+  trackerRows,
+  XLSX,
+  existingDeposits = getDeposits(),
+) {
+  const { references, warnings } = parseCategoryExpenseTracker(trackerRows, XLSX);
+  const expenseQueues = new Map();
+
+  importedTransactions
+    .filter((transaction) => transaction.type === "expense")
+    .forEach((expense) => {
+      const key = expenseMatchKey(expense);
+      if (!expenseQueues.has(key)) expenseQueues.set(key, []);
+      expenseQueues.get(key).push(expense);
+    });
+
+  const depositCandidates = [
+    ...importedTransactions.filter((transaction) => transaction.type === "income"),
+    ...existingDeposits,
+  ].filter((deposit, index, deposits) => (
+    deposit?.id && deposits.findIndex((candidate) => candidate?.id === deposit.id) === index
+  ));
+  const depositsBySource = new Map();
+  depositCandidates.forEach((deposit) => {
+    const source = String(deposit.source ?? deposit.item ?? deposit.description ?? "").trim();
+    const sourceKey = normalizeFundingSourceKey(source);
+    if (sourceKey && !depositsBySource.has(sourceKey)) depositsBySource.set(sourceKey, source);
+  });
+
+  let linkedExpenses = 0;
+  let unmatchedExpenses = 0;
+  let unmatchedDeposits = 0;
+
+  references.forEach(({ expenseKey, fundingReference }) => {
+    const expense = expenseQueues.get(expenseKey)?.shift();
+    if (!expense) {
+      unmatchedExpenses += 1;
+      return;
+    }
+
+    const source = depositsBySource.get(fundingReference.sourceKey);
+    const monthKey = getFundingMonthKey(expense.date);
+    if (!source || !monthKey) {
+      unmatchedDeposits += 1;
+      return;
+    }
+
+    expense.funding_source_id = createCombinedFundingSourceId(source, monthKey);
+    expense.funding_source = formatCombinedFundingSourceLabel(source, monthKey);
+    linkedExpenses += 1;
+  });
+
+  return {
+    linkedExpenses,
+    unmatchedExpenses,
+    unmatchedDeposits,
+    invalidReferences: warnings.length,
+    references: references.length,
+    warnings,
+  };
+}
+
 function parseImportedRows(rows, headerRowIndex, fileName, XLSX) {
   const columns = mapImportColumns(rows[headerRowIndex]);
   const requiredFields = ["date", "item", "category", "amount", "type"];
@@ -441,6 +630,11 @@ function validateImportFileName(fileName) {
   }
 }
 
+function findCategoryTrackerSheetName(sheetNames) {
+  const acceptedNames = CATEGORY_TRACKER_SHEETS.map(normalizeMatchText);
+  return sheetNames.find((sheetName) => acceptedNames.includes(normalizeMatchText(sheetName))) ?? "";
+}
+
 export function readImportBuffer(arrayBuffer, fileName) {
   const XLSX = getSpreadsheetLibrary();
   if (!XLSX) throw new Error("Spreadsheet tools are unavailable.");
@@ -452,9 +646,37 @@ export function readImportBuffer(arrayBuffer, fileName) {
       header: 1,
       defval: "",
       raw: true,
-      blankrows: false,
+      // Keep physical row positions so spreadsheet Row 4 remains array index 3.
+      blankrows: true,
     });
-    return parseLegacyHistoryPayments(legacyRows, fileName, XLSX);
+    const legacyResult = parseLegacyHistoryPayments(legacyRows, fileName, XLSX);
+    const trackerSheetName = findCategoryTrackerSheetName(workbook.SheetNames);
+    if (!trackerSheetName) return legacyResult;
+
+    const trackerRows = XLSX.utils.sheet_to_json(workbook.Sheets[trackerSheetName], {
+      header: 1,
+      defval: "",
+      raw: true,
+      blankrows: true,
+    });
+    const linking = attachCategoryFundingLinks(
+      legacyResult.importedTransactions,
+      trackerRows,
+      XLSX,
+    );
+
+    return {
+      ...legacyResult,
+      counts: {
+        ...legacyResult.counts,
+        linkedExpenses: linking.linkedExpenses,
+        unmatchedFundingReferences: linking.unmatchedExpenses
+          + linking.unmatchedDeposits
+          + linking.invalidReferences,
+      },
+      linkingWarnings: linking.warnings,
+      trackerSheet: trackerSheetName,
+    };
   }
 
   let selectedRows = null;
@@ -507,12 +729,19 @@ async function importTransactionFile(file) {
       return;
     }
 
+    recordState("spreadsheet import");
     appendTransactions(importedTransactions);
     renderDashboard();
+    const linkedSummary = Number.isInteger(counts?.linkedExpenses)
+      ? `, including ${counts.linkedExpenses} linked expense${counts.linkedExpenses === 1 ? "" : "s"}`
+      : "";
     const importSummary = importKind === "legacy-history-payments"
-      ? `${counts.expenses} expense${counts.expenses === 1 ? "" : "s"} and ${counts.deposits} deposit${counts.deposits === 1 ? "" : "s"}`
+      ? `${counts.expenses} expense${counts.expenses === 1 ? "" : "s"} and ${counts.deposits} deposit${counts.deposits === 1 ? "" : "s"}${linkedSummary}`
       : `${importedTransactions.length} transaction${importedTransactions.length === 1 ? "" : "s"}`;
-    setTransferStatus(`${importSummary} imported from ${file.name}. Your dashboard and running balance are up to date.`);
+    const fundingWarning = counts?.unmatchedFundingReferences
+      ? ` ${counts.unmatchedFundingReferences} funding reference${counts.unmatchedFundingReferences === 1 ? "" : "s"} could not be matched.`
+      : "";
+    setTransferStatus(`${importSummary} imported from ${file.name}. Your dashboard and running balance are up to date.${fundingWarning}`);
     showToast(`${importSummary} imported successfully.`);
   } catch (error) {
     console.error("SpendSync import failed:", error);

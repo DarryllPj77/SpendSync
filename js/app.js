@@ -3,14 +3,15 @@
 import {
   addDeposit,
   addExpense,
+  addCustomOption,
   clearCurrentUser,
   clearSession,
   createId,
   deleteTransactionRecord,
-  depositFundingLabel,
+  deleteCustomOption,
   findSessionUser,
   getCurrentUser,
-  getRecentDeposits,
+  getCustomOptions,
   getTransactions,
   getUsers,
   hashPassword,
@@ -19,10 +20,23 @@ import {
   saveUsers,
   setCurrentUser,
 } from "./utils/storage.js";
-import { CATEGORY_OPTIONS, toDateInputValue } from "./utils/formatters.js";
+import {
+  CATEGORY_OPTIONS,
+  DEPOSIT_METHOD_OPTIONS,
+  PAYMENT_METHOD_OPTIONS,
+  formatCurrency,
+  toDateInputValue,
+} from "./utils/formatters.js";
+import {
+  buildCombinedFundingSources,
+  createCombinedFundingSourceId,
+  formatCombinedFundingSourceLabel,
+  getFundingMonthKey,
+} from "./utils/funding.js";
 import { renderDashboardCards } from "./components/dashboard.js";
 import { bindLedgerControls, renderLedger } from "./components/ledger.js";
 import {
+  bindFundingSourceControls,
   destroyMonthlyChart,
   renderCategories,
   renderFundingSources,
@@ -34,6 +48,14 @@ import {
   setTransferStatus,
 } from "./services/excelSync.js";
 import { initializeGoogleDriveImport } from "./services/googleDrive.js";
+import {
+  canUndo,
+  clearHistory,
+  configureHistory,
+  recordState,
+  subscribeHistory,
+  undo,
+} from "./utils/history.js";
 
 const transactionForm = document.querySelector("#transaction-form");
 const depositForm = document.querySelector("#deposit-form");
@@ -46,6 +68,34 @@ const passwordChangeForm = document.querySelector("#password-change-form");
 const sidebar = document.querySelector("#sidebar");
 const sidebarScrim = document.querySelector("#sidebar-scrim");
 let toastTimer = null;
+const ADD_NEW_OPTION_VALUE = "__add_new__";
+const OPTION_CONFIG = Object.freeze({
+  categories: {
+    selectId: "transaction-category",
+    title: "Custom categories",
+    singular: "category",
+    plural: "categories",
+    placeholder: "Select category",
+    defaults: CATEGORY_OPTIONS.expense,
+  },
+  paymentMethods: {
+    selectId: "transaction-method",
+    title: "Custom payment methods",
+    singular: "payment method",
+    plural: "payment methods",
+    placeholder: "Select method",
+    defaults: PAYMENT_METHOD_OPTIONS,
+  },
+  depositMethods: {
+    selectId: "deposit-method",
+    title: "Custom deposit methods",
+    singular: "deposit method",
+    plural: "deposit methods",
+    placeholder: "Select method",
+    defaults: DEPOSIT_METHOD_OPTIONS,
+  },
+});
+let activeOptionKind = "categories";
 
 function setAlert(element, message = "", type = "error") {
   element.textContent = message;
@@ -73,6 +123,43 @@ function showToast(message, isError = false) {
   toast.classList.toggle("is-error", isError);
   toast.hidden = false;
   toastTimer = setTimeout(() => { toast.hidden = true; }, 3200);
+}
+
+function updateUndoButtons({ canUndo: enabled, count, latestLabel }) {
+  document.querySelectorAll("[data-undo-button]").forEach((button) => {
+    button.disabled = !enabled;
+    const description = enabled
+      ? `Undo ${latestLabel} (${count} ${count === 1 ? "change" : "changes"} available)`
+      : "No changes to undo";
+    button.title = description;
+    button.setAttribute("aria-label", description);
+  });
+}
+
+function performUndo() {
+  const entry = undo();
+  if (entry) showToast(`Undid ${entry.label}.`);
+}
+
+function isTypingTarget(target) {
+  return target instanceof HTMLElement
+    && (target.matches("input, textarea, select") || target.isContentEditable);
+}
+
+function bindUndoControls() {
+  subscribeHistory(updateUndoButtons);
+  document.querySelectorAll("[data-undo-button]").forEach((button) => {
+    button.addEventListener("click", performUndo);
+  });
+  document.addEventListener("keydown", (event) => {
+    const isUndoShortcut = (event.ctrlKey || event.metaKey)
+      && !event.altKey
+      && !event.shiftKey
+      && event.key.toLowerCase() === "z";
+    if (!isUndoShortcut || isTypingTarget(event.target) || !canUndo()) return;
+    event.preventDefault();
+    performUndo();
+  });
 }
 
 function updateAccountIdentity() {
@@ -118,27 +205,160 @@ function resetPasswordVisibility(form) {
 
 function logout(loginMessage = "") {
   if (loginMessage) sessionStorage.setItem("spendsync.loginMessage", loginMessage);
+  clearHistory();
   clearSession();
   clearCurrentUser();
   destroyMonthlyChart();
   window.location.replace("login.html");
 }
 
-function updateCategoryOptions() {
-  const categorySelect = document.querySelector("#transaction-category");
-  const previousValue = categorySelect.value;
-  categorySelect.replaceChildren(new Option("Select category", ""));
-  CATEGORY_OPTIONS.expense.forEach((category) => categorySelect.add(new Option(category, category)));
-  if (CATEGORY_OPTIONS.expense.includes(previousValue)) categorySelect.value = previousValue;
+function optionExists(options, value) {
+  const key = value.toLocaleLowerCase("en-PH");
+  return options.some((option) => option.toLocaleLowerCase("en-PH") === key);
+}
+
+function updateCustomizableSelect(kind, preferredValue) {
+  const config = OPTION_CONFIG[kind];
+  const select = document.getElementById(config.selectId);
+  const previousValue = preferredValue ?? select.value;
+  const customOptions = getCustomOptions(kind);
+  select.replaceChildren(new Option(config.placeholder, ""));
+
+  const defaultGroup = document.createElement("optgroup");
+  defaultGroup.label = "Default options";
+  config.defaults.forEach((option) => defaultGroup.append(new Option(option, option)));
+  select.append(defaultGroup);
+
+  if (customOptions.length) {
+    const customGroup = document.createElement("optgroup");
+    customGroup.label = "Custom options";
+    customOptions.forEach((option) => customGroup.append(new Option(option, option)));
+    select.append(customGroup);
+  }
+
+  select.add(new Option("+ Add new…", ADD_NEW_OPTION_VALUE));
+  const allOptions = [...config.defaults, ...customOptions];
+  select.value = optionExists(allOptions, previousValue) ? previousValue : "";
+}
+
+function updateAllCustomizableSelects(preferredValues = {}) {
+  Object.keys(OPTION_CONFIG).forEach((kind) => updateCustomizableSelect(kind, preferredValues[kind]));
+}
+
+function updateCategoryOptions(preferredValue) {
+  updateCustomizableSelect("categories", preferredValue);
+}
+
+function setOptionManagerAlert(message = "", isSuccess = false) {
+  const alert = document.querySelector("#option-manager-alert");
+  alert.textContent = message;
+  alert.hidden = !message;
+  alert.classList.toggle("is-success", Boolean(message) && isSuccess);
+}
+
+function renderOptionManager() {
+  const config = OPTION_CONFIG[activeOptionKind];
+  const customOptions = getCustomOptions(activeOptionKind);
+  document.querySelector("#option-manager-title").textContent = config.title;
+  document.querySelector("#option-manager-input").placeholder = `New ${config.singular}`;
+  const list = document.querySelector("#option-manager-list");
+  list.replaceChildren();
+
+  if (!customOptions.length) {
+    const empty = document.createElement("p");
+    empty.className = "option-manager__empty";
+    empty.textContent = `No custom ${config.plural} yet.`;
+    list.append(empty);
+    return;
+  }
+
+  customOptions.forEach((option) => {
+    const row = document.createElement("div");
+    row.className = "option-manager__item";
+    const name = document.createElement("span");
+    name.textContent = option;
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.title = `Delete ${option}`;
+    removeButton.setAttribute("aria-label", `Delete custom ${config.singular} ${option}`);
+    removeButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7"/></svg>';
+    removeButton.addEventListener("click", () => {
+      recordState("custom option deletion");
+      deleteCustomOption(activeOptionKind, option);
+      updateCustomizableSelect(activeOptionKind);
+      renderOptionManager();
+      showToast(`${option} removed from custom options.`);
+    });
+    row.append(name, removeButton);
+    list.append(row);
+  });
+}
+
+function openOptionManager(kind) {
+  activeOptionKind = kind;
+  setOptionManagerAlert();
+  renderOptionManager();
+  const dialog = document.querySelector("#option-manager-dialog");
+  if (!dialog.open) dialog.showModal();
+  requestAnimationFrame(() => document.querySelector("#option-manager-input").focus());
+}
+
+function bindCustomOptionControls() {
+  document.querySelectorAll("[data-manage-options]").forEach((button) => {
+    button.addEventListener("click", () => openOptionManager(button.dataset.manageOptions));
+  });
+  Object.entries(OPTION_CONFIG).forEach(([kind, config]) => {
+    document.getElementById(config.selectId).addEventListener("change", (event) => {
+      if (event.target.value !== ADD_NEW_OPTION_VALUE) return;
+      event.target.value = "";
+      openOptionManager(kind);
+    });
+  });
+  document.querySelector("#option-manager-close").addEventListener("click", () => {
+    document.querySelector("#option-manager-dialog").close();
+  });
+  document.querySelector("#option-manager-dialog").addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) event.currentTarget.close();
+  });
+  document.querySelector("#option-manager-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const input = document.querySelector("#option-manager-input");
+    const value = input.value.trim().replace(/\s+/g, " ");
+    const config = OPTION_CONFIG[activeOptionKind];
+    const allOptions = [...config.defaults, ...getCustomOptions(activeOptionKind)];
+    if (value.length < 2) {
+      setOptionManagerAlert("Enter at least 2 characters.");
+      return;
+    }
+    if (optionExists(allOptions, value)) {
+      setOptionManagerAlert("That option already exists.");
+      return;
+    }
+
+    recordState("custom option addition");
+    addCustomOption(activeOptionKind, value);
+    updateCustomizableSelect(activeOptionKind, value);
+    input.value = "";
+    setOptionManagerAlert(`${value} added.`, true);
+    renderOptionManager();
+    showToast(`${value} saved as a custom ${config.singular}.`);
+  });
 }
 
 function updateFundingSourceOptions() {
   const select = document.querySelector("#transaction-funding-source");
   const previousValue = select.value;
-  select.replaceChildren(new Option("Not linked to a specific deposit", ""));
-  const availableDeposits = getRecentDeposits();
-  availableDeposits.forEach((deposit) => select.add(new Option(depositFundingLabel(deposit), deposit.id)));
-  if (availableDeposits.some((deposit) => deposit.id === previousValue)) select.value = previousValue;
+  select.replaceChildren(new Option("Not linked to a funding pool", ""));
+  const latestPools = new Map();
+  buildCombinedFundingSources(getTransactions()).forEach((pool) => {
+    const latest = latestPools.get(pool.sourceKey);
+    if (!latest || pool.monthKey > latest.monthKey) latestPools.set(pool.sourceKey, pool);
+  });
+  const availableSources = [...latestPools.values()].sort((a, b) => a.source.localeCompare(b.source));
+  availableSources.forEach((pool) => {
+    select.add(new Option(`${pool.source} (latest available ${formatCurrency(pool.remaining)})`, pool.sourceKey));
+  });
+  if (availableSources.some((pool) => pool.sourceKey === previousValue)) select.value = previousValue;
 }
 
 function renderDashboard() {
@@ -151,12 +371,22 @@ function renderDashboard() {
   updateSettingsSummary();
 }
 
-function deleteTransaction(id) {
+function deleteTransaction(id, row = null) {
   const transaction = getTransactions().find((item) => item.id === id);
-  if (!transaction || !window.confirm(`Delete “${transaction.item}”? This cannot be undone.`)) return;
+  if (!transaction || !window.confirm(`Delete “${transaction.item}”? You can undo this change afterward.`)) return;
+  recordState("transaction deletion");
   deleteTransactionRecord(id);
-  renderDashboard();
-  showToast("Transaction deleted.");
+  const finishDeletion = () => {
+    renderDashboard();
+    if (!getTransactions().some((item) => item.id === id)) showToast("Transaction deleted.");
+  };
+  if (!row) {
+    finishDeletion();
+    return;
+  }
+  row.classList.add("is-leaving");
+  row.querySelectorAll("button").forEach((button) => { button.disabled = true; });
+  window.setTimeout(finishDeletion, 180);
 }
 
 profileForm.addEventListener("submit", (event) => {
@@ -237,17 +467,26 @@ transactionForm.addEventListener("submit", (event) => {
   const alert = document.querySelector("#transaction-alert");
   setAlert(alert);
   const data = new FormData(transactionForm);
-  const fundingSourceId = data.get("fundingSourceId") || null;
-  const selectedDeposit = fundingSourceId ? getRecentDeposits(Number.MAX_SAFE_INTEGER).find((deposit) => deposit.id === fundingSourceId) : null;
+  const fundingSourceKey = data.get("fundingSourceId") || null;
+  const selectedSource = fundingSourceKey
+    ? buildCombinedFundingSources(getTransactions()).find((pool) => pool.sourceKey === fundingSourceKey)
+    : null;
+  const date = data.get("date");
+  const fundingMonthKey = getFundingMonthKey(date);
+  const hasFundingSource = Boolean(selectedSource && fundingMonthKey);
   const expense = {
     id: createId(),
-    date: data.get("date"),
+    date,
     item: data.get("item").trim(),
     category: data.get("category"),
     amount: Number(data.get("amount")),
     method: data.get("method"),
-    funding_source_id: fundingSourceId,
-    funding_source: selectedDeposit ? depositFundingLabel(selectedDeposit) : "",
+    funding_source_id: hasFundingSource
+      ? createCombinedFundingSourceId(selectedSource.source, fundingMonthKey)
+      : null,
+    funding_source: hasFundingSource
+      ? formatCombinedFundingSourceLabel(selectedSource.source, fundingMonthKey)
+      : "",
     createdAt: new Date().toISOString(),
   };
 
@@ -255,12 +494,13 @@ transactionForm.addEventListener("submit", (event) => {
     setAlert(alert, "Complete every field and enter an amount greater than zero.");
     return;
   }
-  if (fundingSourceId && !selectedDeposit) {
-    setAlert(alert, "The selected funding source is no longer available. Choose another deposit.");
+  if (fundingSourceKey && !selectedSource) {
+    setAlert(alert, "The selected funding source is no longer available. Choose another funding pool.");
     updateFundingSourceOptions();
     return;
   }
 
+  recordState("expense creation");
   addExpense(expense);
   transactionForm.reset();
   document.querySelector("#transaction-date").value = toDateInputValue(new Date());
@@ -287,6 +527,7 @@ depositForm.addEventListener("submit", (event) => {
     setAlert(alert, "Complete every field and enter an amount greater than zero.");
     return;
   }
+  recordState("deposit creation");
   addDeposit(deposit);
   depositForm.reset();
   document.querySelector("#deposit-date").value = toDateInputValue(new Date());
@@ -296,7 +537,8 @@ depositForm.addEventListener("submit", (event) => {
 
 function resetAccountData() {
   if (!getTransactions().length) { showToast("There are no transactions to clear."); return; }
-  if (!window.confirm("Reset this account's transaction history? Every income and expense record will be permanently deleted.")) return;
+  if (!window.confirm("Reset this account's transaction history? Every income and expense record will be cleared, but you can undo this change until you log out or reload the app.")) return;
+  recordState("account data reset");
   resetFinancialData();
   renderDashboard();
   showToast("Account transaction data was reset.");
@@ -422,17 +664,29 @@ function initialize() {
   }
 
   initializeCurrentUser(user);
+  clearHistory();
+  configureHistory({
+    onRestore: () => {
+      updateAllCustomizableSelects();
+      renderDashboard();
+      const optionManager = document.querySelector("#option-manager-dialog");
+      if (optionManager.open) renderOptionManager();
+    },
+  });
   updateAccountIdentity();
   populateSettings();
   showDashboardView();
   const today = toDateInputValue(new Date());
   document.querySelector("#transaction-date").value = today;
   document.querySelector("#deposit-date").value = today;
-  updateCategoryOptions();
+  updateAllCustomizableSelects();
   updateFundingSourceOptions();
   selectEntryTab("expense");
   bindNavigation();
+  bindUndoControls();
+  bindCustomOptionControls();
   bindLedgerControls(() => renderLedger(deleteTransaction));
+  bindFundingSourceControls(renderFundingSources);
   initializeExcelSync({ onDataChanged: renderDashboard, notify: showToast });
   initializeGoogleDriveImport({
     importBuffer: importTransactionBuffer,

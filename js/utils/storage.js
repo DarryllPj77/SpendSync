@@ -1,6 +1,13 @@
 "use strict";
 
 import { formatCurrency } from "./formatters.js";
+import {
+  createCombinedFundingSourceId,
+  formatCombinedFundingSourceLabel,
+  getFundingMonthKey,
+  normalizeFundingSourceKey,
+  parseCombinedFundingSourceId,
+} from "./funding.js";
 
 export const STORAGE_KEYS = Object.freeze({
   users: "spendsync.users.v1",
@@ -8,6 +15,17 @@ export const STORAGE_KEYS = Object.freeze({
   transactions: (userId) => `spendsync.transactions.${userId}.v1`,
   expenses: (userId) => `spendsync.expenses.${userId}.v1`,
   deposits: (userId) => `spendsync.deposits.${userId}.v1`,
+  preferences: (userId) => `spendsync.preferences.${userId}.v1`,
+});
+
+const OPTION_PREFERENCE_FIELDS = Object.freeze({
+  categories: "customCategories",
+  paymentMethods: "customPaymentMethods",
+  depositMethods: "customDepositMethods",
+});
+const ORDER_PREFERENCE_FIELDS = Object.freeze({
+  ledger: "ledgerOrder",
+  fundingSources: "fundingSourceOrder",
 });
 
 let currentUser = null;
@@ -22,6 +40,82 @@ export function getStoredArray(key) {
   } catch {
     return [];
   }
+}
+
+function uniqueStrings(values) {
+  const seen = new Set();
+  return (Array.isArray(values) ? values : []).reduce((result, value) => {
+    const text = String(value ?? "").trim().replace(/\s+/g, " ");
+    const key = text.toLocaleLowerCase("en-PH");
+    if (!text || seen.has(key)) return result;
+    seen.add(key);
+    result.push(text);
+    return result;
+  }, []);
+}
+
+function normalizePreferences(value = {}) {
+  return {
+    customCategories: uniqueStrings(value.customCategories),
+    customPaymentMethods: uniqueStrings(value.customPaymentMethods),
+    customDepositMethods: uniqueStrings(value.customDepositMethods),
+    ledgerOrder: uniqueStrings(value.ledgerOrder),
+    fundingSourceOrder: uniqueStrings(value.fundingSourceOrder),
+  };
+}
+
+export function getPreferences() {
+  if (!currentUser) return normalizePreferences();
+  try {
+    return normalizePreferences(JSON.parse(localStorage.getItem(STORAGE_KEYS.preferences(currentUser.id))) ?? {});
+  } catch {
+    return normalizePreferences();
+  }
+}
+
+export function savePreferences(preferences) {
+  const normalized = normalizePreferences(preferences);
+  if (currentUser) {
+    localStorage.setItem(STORAGE_KEYS.preferences(currentUser.id), JSON.stringify(normalized));
+  }
+  return normalized;
+}
+
+export function getCustomOptions(kind) {
+  const field = OPTION_PREFERENCE_FIELDS[kind];
+  return field ? [...getPreferences()[field]] : [];
+}
+
+export function addCustomOption(kind, value) {
+  const field = OPTION_PREFERENCE_FIELDS[kind];
+  if (!field) return [];
+  const preferences = getPreferences();
+  preferences[field] = uniqueStrings([...preferences[field], value]);
+  return savePreferences(preferences)[field];
+}
+
+export function deleteCustomOption(kind, value) {
+  const field = OPTION_PREFERENCE_FIELDS[kind];
+  if (!field) return [];
+  const key = String(value ?? "").trim().toLocaleLowerCase("en-PH");
+  const preferences = getPreferences();
+  preferences[field] = preferences[field].filter(
+    (option) => option.toLocaleLowerCase("en-PH") !== key,
+  );
+  return savePreferences(preferences)[field];
+}
+
+export function getCustomOrder(view) {
+  const field = ORDER_PREFERENCE_FIELDS[view];
+  return field ? [...getPreferences()[field]] : [];
+}
+
+export function saveCustomOrder(view, ids) {
+  const field = ORDER_PREFERENCE_FIELDS[view];
+  if (!field) return [];
+  const preferences = getPreferences();
+  preferences[field] = uniqueStrings(ids);
+  return savePreferences(preferences)[field];
 }
 
 export function createId() {
@@ -148,9 +242,25 @@ function loadFinancialData(userId) {
   }
 
   expenses = expenses.map((expense) => {
-    if (expense.funding_source || !expense.funding_source_id) return expense;
+    if (!expense.funding_source_id) return expense;
+    const combinedSource = parseCombinedFundingSourceId(expense.funding_source_id);
+    if (combinedSource) {
+      if (expense.funding_source) return expense;
+      const deposit = deposits.find((candidate) => (
+        normalizeFundingSourceKey(candidate.source) === combinedSource.sourceKey
+      ));
+      return deposit
+        ? { ...expense, funding_source: formatCombinedFundingSourceLabel(deposit.source, combinedSource.monthKey) }
+        : expense;
+    }
     const linkedDeposit = deposits.find((deposit) => deposit.id === expense.funding_source_id);
-    return linkedDeposit ? { ...expense, funding_source: depositFundingLabel(linkedDeposit) } : expense;
+    if (!linkedDeposit) return expense;
+    const monthKey = getFundingMonthKey(expense.date);
+    return {
+      ...expense,
+      funding_source_id: createCombinedFundingSourceId(linkedDeposit.source, monthKey),
+      funding_source: formatCombinedFundingSourceLabel(linkedDeposit.source, monthKey),
+    };
   });
   localStorage.setItem(expensesKey, JSON.stringify(expenses));
   localStorage.setItem(depositsKey, JSON.stringify(deposits));
@@ -187,6 +297,23 @@ export function getDeposits() {
 
 export function getTransactions() {
   return transactions;
+}
+
+export function captureApplicationState() {
+  return {
+    expenses: expenses.map((expense) => ({ ...expense })),
+    deposits: deposits.map((deposit) => ({ ...deposit })),
+    preferences: getPreferences(),
+  };
+}
+
+export function restoreApplicationState(snapshot) {
+  if (!currentUser || !snapshot) return false;
+  expenses = (Array.isArray(snapshot.expenses) ? snapshot.expenses : []).map(normalizeExpense);
+  deposits = (Array.isArray(snapshot.deposits) ? snapshot.deposits : []).map(normalizeDeposit);
+  savePreferences(snapshot.preferences ?? {});
+  persistFinancialData();
+  return true;
 }
 
 export function getRecentDeposits(limit = 25) {

@@ -12,7 +12,7 @@ SpendSync is a responsive personal and small-business finance tracker built with
 - User-scoped transaction reset and manual logout controls
 - CSV and Excel ledger export with chronological running balances
 - CSV, XLSX, and XLS import with atomic row validation
-- XLSX and CSV import directly from Google Drive
+- Google Sheets, XLSX, and CSV import directly from Google Drive
 - Month-by-month income, expense, and net-balance reports
 - Funding-source links between income deposits and expenses
 - Responsive desktop, tablet, and mobile layouts
@@ -35,11 +35,11 @@ Date, Item, Category, Amount, Type
 
 `Payment / Deposit Method` is optional and defaults to `Imported File`. Header matching is case-insensitive, and common alternatives such as `Description`, `Transaction Type`, and `Payment Method` are supported. If any row is invalid, the complete import is stopped so existing data is never partially updated.
 
-SpendSync also recognizes the legacy `Budget Pajaganas.xlsx` layout. When a workbook contains a sheet named **History Payments**, the importer reads the headers beginning at processed row index 2, maps expense columns A–E, detects the right-side `Date Added` through `Deposit Method` columns, skips blank rows, and appends both histories to the signed-in account. Imported records are normalized into the separate expense and deposit collections before every dependent view is refreshed.
+SpendSync also recognizes the legacy `Budget Pajaganas.xlsx` layout. When a workbook contains a sheet named **History Payments**, the importer preserves physical worksheet rows and reads the headers from Row 4 (array index 3). It maps the exact `Amount Spent` expense column, removes peso symbols and thousands separators before parsing amounts, detects the right-side `Date Added` through `Deposit Method` columns, and appends both histories to the signed-in account. If the workbook also contains **Category Expense Tracker** (or the older **Category Tracking** name), the importer reads `Funding Source (Recent Deposit)`, matches the repeated expense row, resolves a deposit with the same source name and exact amount, and stores that deposit ID on the expense. Imported records are normalized into the separate expense and deposit collections before every dependent view is refreshed.
 
 ## Google Drive import setup
 
-Drive import is entirely browser-side. Google Picker grants access to the file the user selects, the app downloads its bytes with the Drive API, and those bytes enter the same SheetJS parser used by local uploads. No spreadsheet data is sent to a SpendSync server.
+Drive import is entirely browser-side. Google Picker grants access to the file the user selects. Stored XLSX and CSV files are downloaded normally, while native Google Sheets are exported to XLSX in memory. The resulting bytes enter the same SheetJS parser used by local uploads. No spreadsheet data is sent to a SpendSync server.
 
 > Google does not define a `drive.readonly.file` OAuth scope. SpendSync uses `https://www.googleapis.com/auth/drive.file`, Google's recommended per-file scope for files selected through Google Picker. It does not request read access to every file in the user's Drive.
 

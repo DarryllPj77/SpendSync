@@ -1,10 +1,13 @@
 "use strict";
 
-import { getTransactions } from "../utils/storage.js";
+import { getCustomOrder, getTransactions, saveCustomOrder } from "../utils/storage.js";
 import { categoryColor, formatCurrency, formatDate, formatMonthLabel } from "../utils/formatters.js";
+import { buildCombinedFundingSources } from "../utils/funding.js";
+import { recordState } from "../utils/history.js";
 import { getFundingSourceLabel } from "./ledger.js";
 
 let monthlySummaryChart = null;
+const expandedIncomeHistoryIds = new Set();
 
 export function getMonthlySummary() {
   const monthlyTotals = new Map();
@@ -165,23 +168,17 @@ export function destroyMonthlyChart() {
 
 export function getFundingSourceSummary() {
   const transactions = getTransactions();
-  const incomes = transactions
-    .filter((transaction) => transaction.type === "income")
-    .sort((a, b) => b.date.localeCompare(a.date) || String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
-  const sourceIds = new Set(incomes.map((income) => income.id));
-  const linkedExpenses = transactions.filter((transaction) =>
-    transaction.type === "expense" && transaction.funding_source_id && sourceIds.has(transaction.funding_source_id)
-  );
-  const totalDeposits = incomes.reduce((sum, income) => sum + income.amount, 0);
-  const totalAllocated = linkedExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const sources = incomes.map((income) => {
-    const expenses = linkedExpenses
-      .filter((expense) => expense.funding_source_id === income.id)
-      .sort((a, b) => b.date.localeCompare(a.date) || String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
-    const spent = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-    return { income, expenses, spent, remaining: income.amount - spent };
+  const sources = buildCombinedFundingSources(transactions);
+  const totalDeposits = sources.reduce((sum, source) => sum + source.newDeposits, 0);
+  const totalAllocated = sources.reduce((sum, source) => sum + source.spent, 0);
+  const latestSourceMonths = new Map();
+  sources.forEach((source) => {
+    const latest = latestSourceMonths.get(source.sourceKey);
+    if (!latest || source.monthKey > latest.monthKey) latestSourceMonths.set(source.sourceKey, source);
   });
-  return { sources, totalDeposits, totalAllocated, totalRemaining: totalDeposits - totalAllocated };
+  const totalRemaining = [...latestSourceMonths.values()]
+    .reduce((sum, source) => sum + source.remaining, 0);
+  return { sources, totalDeposits, totalAllocated, totalRemaining };
 }
 
 export function renderFundingSources() {
@@ -195,12 +192,103 @@ export function renderFundingSources() {
   container.replaceChildren();
   container.hidden = fundingSummary.sources.length === 0;
   empty.hidden = fundingSummary.sources.length > 0;
-  fundingSummary.sources.forEach(({ income, expenses, spent }) => container.append(createFundingSourceCard(income, expenses, spent)));
+  const sortMode = document.querySelector("#funding-source-sort")?.value ?? "latest";
+  const sortedSources = sortFundingSources(fundingSummary.sources, sortMode, getCustomOrder("fundingSources"));
+  sortedSources.forEach((source, index) => {
+    container.append(createFundingSourceCard(source, index));
+  });
 }
 
-function createFundingSourceCard(income, expenses, spent) {
+export function sortFundingSources(sources, sortMode, customOrder = []) {
+  const sorted = [...sources];
+  const createdAt = (source) => String(source.createdAt ?? "");
+  if (sortMode === "oldest") {
+    return sorted.sort((a, b) => a.monthKey.localeCompare(b.monthKey) || a.source.localeCompare(b.source));
+  }
+  if (sortMode === "highest" || sortMode === "lowest") {
+    const direction = sortMode === "highest" ? -1 : 1;
+    return sorted.sort((a, b) => (
+      direction * (a.available - b.available)
+      || b.monthKey.localeCompare(a.monthKey)
+      || createdAt(b).localeCompare(createdAt(a))
+    ));
+  }
+  if (sortMode === "custom") {
+    const positions = new Map(customOrder.map((id, index) => [id, index]));
+    return sorted.sort((a, b) => (
+      (positions.get(a.id) ?? Number.MAX_SAFE_INTEGER)
+      - (positions.get(b.id) ?? Number.MAX_SAFE_INTEGER)
+      || b.monthKey.localeCompare(a.monthKey)
+      || createdAt(b).localeCompare(createdAt(a))
+    ));
+  }
+  return sorted.sort((a, b) => b.monthKey.localeCompare(a.monthKey) || a.source.localeCompare(b.source));
+}
+
+function createIncomeHistoryPanel(source, panelId, isExpanded) {
+  const panel = document.createElement("section");
+  panel.className = "income-history-panel";
+  panel.id = panelId;
+  panel.setAttribute("aria-hidden", String(!isExpanded));
+  panel.classList.toggle("is-open", isExpanded);
+
+  const heading = document.createElement("div");
+  heading.className = "income-history-panel__heading";
+  const title = document.createElement("strong");
+  title.textContent = "Income history";
+  const count = document.createElement("span");
+  count.textContent = `${source.originalDeposits.length} original deposit${source.originalDeposits.length === 1 ? "" : "s"}`;
+  heading.append(title, count);
+  panel.append(heading);
+
+  if (!source.originalDeposits.length) {
+    const empty = document.createElement("p");
+    empty.className = "income-history-panel__empty";
+    empty.textContent = "No new deposits were recorded for this month; the pool contains rollover funds only.";
+    panel.append(empty);
+    return panel;
+  }
+
+  const tableWrap = document.createElement("div");
+  tableWrap.className = "income-history-table-wrap";
+  const table = document.createElement("table");
+  table.className = "income-history-table";
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  ["Date Added", "Source/Description", "Amount Added", "Deposit Method"].forEach((label) => {
+    const cell = document.createElement("th");
+    cell.textContent = label;
+    headerRow.append(cell);
+  });
+  thead.append(headerRow);
+  const tbody = document.createElement("tbody");
+  source.originalDeposits.forEach((deposit) => {
+    const row = document.createElement("tr");
+    [
+      formatDate(deposit.date),
+      deposit.source,
+      formatCurrency(deposit.amount),
+      deposit.method,
+    ].forEach((value, columnIndex) => {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      if (columnIndex === 2) cell.className = "number-cell";
+      row.append(cell);
+    });
+    tbody.append(row);
+  });
+  table.append(thead, tbody);
+  tableWrap.append(table);
+  panel.append(tableWrap);
+  return panel;
+}
+
+function createFundingSourceCard(source, index = 0) {
   const card = document.createElement("article");
   card.className = "funding-source-card";
+  card.dataset.fundingSourceId = source.id;
+  card.draggable = true;
+  card.style.animationDelay = `${Math.min(index, 10) * 18}ms`;
   const summary = document.createElement("div");
   summary.className = "funding-source-card__summary";
   const deposit = document.createElement("div");
@@ -211,23 +299,53 @@ function createFundingSourceCard(income, expenses, spent) {
   const copy = document.createElement("span");
   copy.className = "funding-deposit__copy";
   const name = document.createElement("strong");
-  name.textContent = income.item;
+  name.textContent = source.label;
   const details = document.createElement("small");
-  details.textContent = `${formatDate(income.date)} • ${income.category} • ${income.method}`;
+  details.textContent = `Combined monthly pool • ${source.originalDeposits.length} new deposit${source.originalDeposits.length === 1 ? "" : "s"}`;
   copy.append(name, details);
   deposit.append(icon, copy);
   summary.append(deposit);
   summary.append(
-    createFundingMetric("Deposit", formatCurrency(income.amount)),
-    createFundingMetric("Linked expenses", formatCurrency(spent), "funding-metric--spent"),
-    createFundingMetric("Remaining", formatCurrency(income.amount - spent), "funding-metric--remaining", income.amount - spent < 0),
+    createFundingMetric("Total available", formatCurrency(source.available)),
+    createFundingMetric("Linked expenses", formatCurrency(source.spent), "funding-metric--spent"),
+    createFundingMetric("Remaining", formatCurrency(source.remaining), "funding-metric--remaining", source.remaining < 0),
   );
   card.append(summary);
 
-  if (!expenses.length) {
+  const breakdown = document.createElement("div");
+  breakdown.className = "funding-pool-breakdown";
+  breakdown.append(
+    createFundingMetric("Rollover from Previous Month", formatCurrency(source.rollover), "funding-breakdown-metric"),
+    createFundingMetric("New Deposits", formatCurrency(source.newDeposits), "funding-breakdown-metric"),
+  );
+  const panelId = `income-history-${source.id.replace(/[^a-z0-9_-]/gi, "-")}`;
+  const isExpanded = expandedIncomeHistoryIds.has(source.id);
+  const historyButton = document.createElement("button");
+  historyButton.className = "income-history-toggle";
+  historyButton.type = "button";
+  historyButton.setAttribute("aria-controls", panelId);
+  historyButton.setAttribute("aria-expanded", String(isExpanded));
+  historyButton.innerHTML = `<span>${isExpanded ? "Hide" : "View"} Income History</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`;
+  breakdown.append(historyButton);
+  card.append(breakdown);
+
+  const historyPanel = createIncomeHistoryPanel(source, panelId, isExpanded);
+  historyButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const nextExpanded = historyButton.getAttribute("aria-expanded") !== "true";
+    historyButton.setAttribute("aria-expanded", String(nextExpanded));
+    historyButton.querySelector("span").textContent = `${nextExpanded ? "Hide" : "View"} Income History`;
+    historyPanel.classList.toggle("is-open", nextExpanded);
+    historyPanel.setAttribute("aria-hidden", String(!nextExpanded));
+    if (nextExpanded) expandedIncomeHistoryIds.add(source.id);
+    else expandedIncomeHistoryIds.delete(source.id);
+  });
+  card.append(historyPanel);
+
+  if (!source.expenses.length) {
     const noExpenses = document.createElement("p");
     noExpenses.className = "funding-expense-empty";
-    noExpenses.textContent = "No expenses are linked to this deposit yet.";
+    noExpenses.textContent = "No expenses are linked to this monthly pool yet.";
     card.append(noExpenses);
     return card;
   }
@@ -236,9 +354,9 @@ function createFundingSourceCard(income, expenses, spent) {
   list.className = "funding-expense-list";
   const header = document.createElement("div");
   header.className = "funding-expense-list__header";
-  header.textContent = `${expenses.length} linked expense${expenses.length === 1 ? "" : "s"}`;
+  header.textContent = `${source.expenses.length} linked expense${source.expenses.length === 1 ? "" : "s"}`;
   list.append(header);
-  expenses.forEach((expense) => {
+  source.expenses.forEach((expense) => {
     const row = document.createElement("div");
     row.className = "funding-expense-row";
     const rowCopy = document.createElement("span");
@@ -255,6 +373,83 @@ function createFundingSourceCard(income, expenses, spent) {
   });
   card.append(list);
   return card;
+}
+
+function clearFundingDropFeedback(container) {
+  container.querySelectorAll(".is-dragging, .drag-over-before, .drag-over-after").forEach((card) => {
+    card.classList.remove("is-dragging", "drag-over-before", "drag-over-after");
+  });
+}
+
+export function bindFundingSourceControls(onRender = renderFundingSources) {
+  const select = document.querySelector("#funding-source-sort");
+  const container = document.querySelector("#funding-source-list");
+  if (!select || !container) return;
+  let draggedCard = null;
+  let dropCommitted = false;
+  let originalSortMode = "latest";
+  let dragBaseOrder = [];
+
+  select.addEventListener("change", onRender);
+  container.addEventListener("dragstart", (event) => {
+    if (event.target.closest("button, .income-history-panel")) {
+      event.preventDefault();
+      return;
+    }
+    const card = event.target.closest("[data-funding-source-id]");
+    if (!card) return;
+    originalSortMode = select.value;
+    if (select.value !== "custom") {
+      dragBaseOrder = [...container.querySelectorAll("[data-funding-source-id]")]
+        .map((item) => item.dataset.fundingSourceId);
+      select.value = "custom";
+    } else {
+      dragBaseOrder = getCustomOrder("fundingSources");
+    }
+    draggedCard = card;
+    dropCommitted = false;
+    card.classList.add("is-dragging");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", card.dataset.fundingSourceId);
+  });
+
+  container.addEventListener("dragover", (event) => {
+    if (!draggedCard) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    const target = event.target.closest("[data-funding-source-id]");
+    container.querySelectorAll(".drag-over-before, .drag-over-after").forEach((card) => {
+      card.classList.remove("drag-over-before", "drag-over-after");
+    });
+    if (!target || target === draggedCard) return;
+    const isAfter = event.clientY > target.getBoundingClientRect().top + target.offsetHeight / 2;
+    target.classList.add(isAfter ? "drag-over-after" : "drag-over-before");
+    container.insertBefore(draggedCard, isAfter ? target.nextSibling : target);
+  });
+
+  container.addEventListener("drop", (event) => {
+    if (!draggedCard) return;
+    event.preventDefault();
+    const nextOrder = [...container.querySelectorAll("[data-funding-source-id]")]
+      .map((card) => card.dataset.fundingSourceId);
+    if (nextOrder.join("\u001f") !== dragBaseOrder.join("\u001f")) {
+      recordState("funding source reorder");
+      saveCustomOrder("fundingSources", nextOrder);
+    }
+    dropCommitted = true;
+    clearFundingDropFeedback(container);
+    draggedCard = null;
+    requestAnimationFrame(onRender);
+  });
+
+  container.addEventListener("dragend", () => {
+    clearFundingDropFeedback(container);
+    draggedCard = null;
+    if (!dropCommitted) {
+      select.value = originalSortMode;
+      requestAnimationFrame(onRender);
+    }
+  });
 }
 
 function createFundingMetric(label, value, className = "", isNegative = false) {

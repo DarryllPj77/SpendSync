@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="SpendSync — personal and small business finance tracking in one simple workspace.">
   <meta name="theme-color" content="#0f766e">
-  <meta name="google-drive-client-id" content="YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com">
-  <meta name="google-drive-api-key" content="YOUR_GOOGLE_API_KEY">
-  <meta name="google-drive-app-id" content="YOUR_GOOGLE_CLOUD_PROJECT_NUMBER">
+  <meta name="google-drive-client-id" content="717853070420-7qmahae5dinai9qjpnj6fab0o8dk4h79.apps.googleusercontent.com">
+  <meta name="google-drive-api-key" content="AIzaSyCNurphReZX6lcfcsq0shbqpOlAGuKGRQw">
+  <meta name="google-drive-app-id" content="717853070420">
   <title>Dashboard | SpendSync</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -158,29 +158,25 @@
             <div class="field-row">
               <div class="field">
                 <label for="transaction-category">Category</label>
-                <select id="transaction-category" name="category" required></select>
+                <div class="option-select-group">
+                  <select id="transaction-category" name="category" required></select>
+                  <button class="option-manage-button" type="button" data-manage-options="categories" aria-label="Manage custom categories">+</button>
+                </div>
               </div>
               <div class="field">
                 <label for="transaction-method">Payment method</label>
-                <select id="transaction-method" name="method" required>
-                  <option value="">Select method</option>
-                  <option>Cash</option>
-                  <option>GCash</option>
-                  <option>Maya</option>
-                  <option>Bank Transfer</option>
-                  <option>Debit Card</option>
-                  <option>Credit Card</option>
-                  <option>Cheque</option>
-                  <option>Other</option>
-                </select>
+                <div class="option-select-group">
+                  <select id="transaction-method" name="method" required></select>
+                  <button class="option-manage-button" type="button" data-manage-options="paymentMethods" aria-label="Manage custom payment methods">+</button>
+                </div>
               </div>
             </div>
             <div class="field funding-source-field" id="funding-source-field">
               <label for="transaction-funding-source">Funding source <span class="optional-label">Optional</span></label>
               <select id="transaction-funding-source" name="fundingSourceId">
-                <option value="">Not linked to a specific deposit</option>
+                <option value="">Not linked to a funding pool</option>
               </select>
-              <small class="field__hint">Choose the deposit that paid for this expense.</small>
+              <small class="field__hint">Choose a source; the expense will use that source's pool for its month.</small>
             </div>
             <div class="form-alert" id="transaction-alert" role="alert" hidden></div>
             <button class="button button--primary button--full" type="submit">Save expense <span aria-hidden="true">&rarr;</span></button>
@@ -211,15 +207,10 @@
             </div>
             <div class="field">
               <label for="deposit-method">Deposit method</label>
-              <select id="deposit-method" name="method" required>
-                <option value="">Select method</option>
-                <option>Cash</option>
-                <option>GCash</option>
-                <option>Maya</option>
-                <option>Bank Transfer</option>
-                <option>Cheque</option>
-                <option>Other</option>
-              </select>
+              <div class="option-select-group">
+                <select id="deposit-method" name="method" required></select>
+                <button class="option-manage-button" type="button" data-manage-options="depositMethods" aria-label="Manage custom deposit methods">+</button>
+              </div>
             </div>
             <div class="form-alert" id="deposit-alert" role="alert" hidden></div>
             <button class="button button--primary button--full" type="submit">Save deposit <span aria-hidden="true">&rarr;</span></button>
@@ -252,6 +243,16 @@
                   <option value="all">All categories</option>
                 </select>
               </label>
+              <label class="ledger-filter-field">
+                <span>Sort</span>
+                <select class="compact-select" id="transaction-sort">
+                  <option value="latest">Latest</option>
+                  <option value="oldest">Oldest</option>
+                  <option value="highest">Highest amount</option>
+                  <option value="lowest">Lowest amount</option>
+                  <option value="custom">Custom order</option>
+                </select>
+              </label>
               <label class="ledger-filter-field ledger-date-filter">
                 <span>Start date</span>
                 <input class="compact-date" id="transaction-start-date" type="date">
@@ -260,6 +261,10 @@
                 <span>End date</span>
                 <input class="compact-date" id="transaction-end-date" type="date">
               </label>
+              <button class="undo-button" type="button" data-undo-button disabled title="No changes to undo">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7H4V2M4 7a9 9 0 1 1-1 7"/></svg>
+                <span>Undo changes</span>
+              </button>
             </div>
           </div>
           <div class="table-wrap ledger-table-wrap">
@@ -412,7 +417,22 @@
             <p class="section-kicker">Deposit breakdown</p>
             <h2>Income and linked expenses</h2>
           </div>
-          <p class="panel__hint">Most recent deposits first</p>
+          <div class="funding-header-controls">
+            <label class="ledger-filter-field funding-sort-field">
+              <span>Sort deposits</span>
+              <select class="compact-select" id="funding-source-sort">
+                <option value="latest">Latest</option>
+                <option value="oldest">Oldest</option>
+                <option value="highest">Highest amount</option>
+                <option value="lowest">Lowest amount</option>
+                <option value="custom">Custom order</option>
+              </select>
+            </label>
+            <button class="undo-button" type="button" data-undo-button disabled title="No changes to undo">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7H4V2M4 7a9 9 0 1 1-1 7"/></svg>
+              <span>Undo changes</span>
+            </button>
+          </div>
         </div>
         <div class="funding-source-list" id="funding-source-list"></div>
         <div class="empty-state" id="funding-sources-empty" hidden>
@@ -631,6 +651,28 @@
     </main>
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+    <dialog class="option-manager" id="option-manager-dialog" aria-labelledby="option-manager-title">
+      <div class="option-manager__header">
+        <div>
+          <p class="section-kicker">Custom options</p>
+          <h2 id="option-manager-title">Manage options</h2>
+        </div>
+        <button class="option-manager__close" id="option-manager-close" type="button" aria-label="Close option manager">×</button>
+      </div>
+      <form class="option-manager__form" id="option-manager-form">
+        <label for="option-manager-input">Add a new option</label>
+        <div class="option-manager__add">
+          <input id="option-manager-input" type="text" maxlength="40" autocomplete="off" required>
+          <button class="button button--primary" type="submit">Add</button>
+        </div>
+        <p class="form-alert option-manager__alert" id="option-manager-alert" role="alert" hidden></p>
+      </form>
+      <div class="option-manager__content">
+        <p>Default options are always available and cannot be deleted.</p>
+        <div class="option-manager__list" id="option-manager-list"></div>
+      </div>
+    </dialog>
   </div>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>

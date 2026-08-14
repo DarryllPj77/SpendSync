@@ -30,6 +30,8 @@ body {
   color: var(--ink-950);
   background: var(--canvas);
   font-family: "DM Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 17px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -92,7 +94,7 @@ button:disabled { cursor: wait; opacity: .68; }
 .password-toggle { position: absolute; top: 50%; right: 9px; display: grid; width: 34px; height: 34px; padding: 0; place-items: center; transform: translateY(-50%); border: 0; border-radius: 8px; color: var(--ink-500); background: transparent; }
 .password-toggle:hover { color: var(--brand-700); background: var(--brand-50); }
 .icon-eye { width: 20px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
-.button { display: inline-flex; min-height: 50px; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 12px; padding: 0 20px; font-weight: 700; transition: transform .2s, background .2s, box-shadow .2s; }
+.button { display: inline-flex; min-height: 50px; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 12px; padding: 0 20px; font-weight: 700; transition: all .2s ease; }
 .button:hover { transform: translateY(-1px); }
 .button--primary { color: #fff; background: var(--brand-700); box-shadow: 0 10px 22px rgba(15,118,110,.2); }
 .button--primary:hover { background: var(--brand-800); box-shadow: 0 13px 26px rgba(15,118,110,.25); }
@@ -110,4 +112,3 @@ button:disabled { cursor: wait; opacity: .68; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
-

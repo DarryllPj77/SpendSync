@@ -4,6 +4,12 @@ export const CATEGORY_OPTIONS = Object.freeze({
   income: ["Salary", "Business Income", "Freelance", "Sales", "Allowance", "Other Income"],
   expense: ["Business", "Groceries", "Ulam", "Transportation", "Utilities", "Rent", "Dining", "Health", "Education", "Entertainment", "Other"],
 });
+export const PAYMENT_METHOD_OPTIONS = Object.freeze([
+  "Cash", "GCash", "Maya", "Bank Transfer", "Debit Card", "Credit Card", "Cheque", "Other",
+]);
+export const DEPOSIT_METHOD_OPTIONS = Object.freeze([
+  "Cash", "GCash", "Maya", "Bank Transfer", "Cheque", "Other",
+]);
 
 const CATEGORY_COLORS = Object.freeze([
   "#0d9488", "#f59e0b", "#6366f1", "#ec4899", "#0ea5e9", "#84cc16",
